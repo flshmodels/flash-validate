@@ -2,7 +2,14 @@ import { fail, record } from './http.mjs';
 
 const types = ['object', 'array', 'string', 'number', 'integer', 'boolean', 'null'];
 const common = ['type', 'enum'];
-const rules = { object: ['properties', 'required', 'additionalProperties'], array: ['items', 'minItems', 'maxItems'], string: ['minLength', 'maxLength'], number: ['minimum', 'maximum'], integer: ['minimum', 'maximum'], boolean: [], null: [] };
+const rules = {
+  object: ['properties', 'required', 'additionalProperties'],
+  array: ['items', 'minItems', 'maxItems'],
+  string: ['minLength', 'maxLength'],
+  number: ['minimum', 'maximum'],
+  integer: ['minimum', 'maximum'],
+  boolean: [], null: [],
+};
 const pointer = (path, name) => `${path}/${String(name).replace(/~/g, '~0').replace(/\//g, '~1')}`;
 
 export function checkSchema(schema) {
@@ -12,17 +19,31 @@ export function checkSchema(schema) {
     if (++nodes > 200 || depth > 8) invalid('Schema exceeds 200 nodes or 8 levels of nesting.');
     if (!record(s) || !types.includes(s.type)) invalid('Each schema must be an object with a supported type.');
     if (Object.keys(s).some(key => ![...common, ...rules[s.type]].includes(key))) invalid(`Unsupported rule for type ${s.type}.`);
-    if (Object.hasOwn(s, 'enum') && (!Array.isArray(s.enum) || !s.enum.length || s.enum.length > 100 || s.enum.some(value => value !== null && !['string', 'number', 'boolean'].includes(typeof value)))) invalid('enum must contain 1–100 JSON scalar values.');
+    if (Object.hasOwn(s, 'enum')
+        && (!Array.isArray(s.enum)
+        || !s.enum.length
+        || s.enum.length > 100
+        || s.enum.some(value => value !== null
+        && !['string', 'number', 'boolean'].includes(typeof value)))) invalid('enum must contain 1–100 JSON scalar values.');
     if (s.type === 'object') {
       if (Object.hasOwn(s, 'properties') && !record(s.properties)) invalid('properties must be an object.');
       const properties = s.properties ?? {};
-      if (Object.hasOwn(s, 'required') && (!Array.isArray(s.required) || s.required.some(name => typeof name !== 'string' || !Object.hasOwn(properties, name)) || new Set(s.required).size !== s.required.length)) invalid('required must list distinct declared property names.');
+      if (Object.hasOwn(s, 'required')
+          && (!Array.isArray(s.required)
+          || s.required.some(name => typeof name !== 'string'
+          || !Object.hasOwn(properties, name))
+          || new Set(s.required).size !== s.required.length)) invalid('required must list distinct declared property names.');
       if (Object.hasOwn(s, 'additionalProperties') && typeof s.additionalProperties !== 'boolean') invalid('additionalProperties must be a boolean.');
       for (const child of Object.values(properties)) visit(child, depth + 1);
     }
     if (s.type === 'array') { if (!Object.hasOwn(s, 'items')) invalid('Array schemas require items.'); visit(s.items, depth + 1); }
     for (const [minimum, maximum, integer] of [['minLength', 'maxLength', true], ['minItems', 'maxItems', true], ['minimum', 'maximum', false]]) {
-      for (const key of [minimum, maximum]) if (Object.hasOwn(s, key) && (typeof s[key] !== 'number' || !Number.isFinite(s[key]) || (integer && (!Number.isSafeInteger(s[key]) || s[key] < 0)))) invalid(`Invalid ${key}.`);
+      for (const key of [minimum, maximum]) if (Object.hasOwn(s, key)
+          && (typeof s[key] !== 'number'
+          || !Number.isFinite(s[key])
+          || (integer
+          && (!Number.isSafeInteger(s[key])
+          || s[key] < 0)))) invalid(`Invalid ${key}.`);
       if (s[minimum] !== undefined && s[maximum] !== undefined && s[minimum] > s[maximum]) invalid(`${minimum} cannot exceed ${maximum}.`);
     }
   }
@@ -35,7 +56,13 @@ export function validate(schema, data) {
   const issue = (path, code, message) => { if (errors.length < 100) errors.push({ path, code, message }); };
   function visit(s, value, path) {
     if (errors.length >= 100) return;
-    const matches = s.type === 'null' ? value === null : s.type === 'object' ? record(value) : s.type === 'array' ? Array.isArray(value) : s.type === 'integer' ? Number.isSafeInteger(value) : s.type === 'number' ? typeof value === 'number' && Number.isFinite(value) : typeof value === s.type;
+    const matches = s.type === 'null' ? value === null
+      : s.type === 'object' ? record(value)
+      : s.type === 'array' ? Array.isArray(value)
+      : s.type === 'integer' ? Number.isSafeInteger(value)
+      : s.type === 'number' ? typeof value === 'number'
+        && Number.isFinite(value)
+      : typeof value === s.type;
     if (!matches) { issue(path, 'type', `Expected ${s.type}.`); return; }
     if (s.enum && !s.enum.some(item => item === value)) issue(path, 'enum', 'Value is not an allowed choice.');
     if (s.type === 'object') {
